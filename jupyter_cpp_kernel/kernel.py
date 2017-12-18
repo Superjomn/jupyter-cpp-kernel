@@ -70,7 +70,8 @@ class CppKernel(Kernel):
     language_version = 'c++11'
     language_info = {
         'name': 'c++',
-        'mimetype': 'text/plain',
+        'codemirror_mode': 'c++',
+        'mimetype': 'text/x-c++src',
         'file_extension': '.cc',
     }
     banner = ""
