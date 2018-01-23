@@ -107,6 +107,8 @@ class CppKernel(Kernel):
     def _magic(self, code):
         topcodes = []
         add_main = True
+        cflags = []
+        ldflags = []
         for line in code.splitlines():
             line = line.strip()
             if line.startswith('//%'):
@@ -124,13 +126,19 @@ class CppKernel(Kernel):
                     topcodes.append('using namespace %s;' % value)
                 if key == 'main' and value == 'no':
                     add_main = False
+                if key == 'cflags':
+                    for v in value.strip().split():
+                        cflags.append(v)
+                if key == 'ldflags':
+                    for v in value.strip().split():
+                        ldflags.append(v)
 
         if add_main:
             code = '\n'.join(topcodes) + '\nint main() {\n' + code + '\nreturn 0;\n}'
         else:
             code = '\n'.join(topcodes) + code
 
-        return code
+        return code, cflags, ldflags
 
 
     def compile(self, source_filename, binary_filename, cflags=None, ldflags=None):
@@ -141,11 +149,11 @@ class CppKernel(Kernel):
     def do_execute(self, code, silent, store_history=True,
                    user_expressions=None, allow_stdin=False):
         with self.new_temp_file(suffix='.cc') as source_file:
-            code = self._magic(code)
+            code, cflags, ldflags = self._magic(code)
             source_file.write(code)
             source_file.flush()
             with self.new_temp_file(suffix='.out') as binary_file:
-                p = self.compile(source_file.name, binary_file.name, [], [])
+                p = self.compile(source_file.name, binary_file.name, cflags, ldflags)
                 while p.poll() is None:
                     p.write_contents()
                 p.write_contents()
