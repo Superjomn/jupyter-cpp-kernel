@@ -74,3 +74,25 @@ int main() {
   return 0;
 }
 ```
+
+### cflags and ldflags
+By setting `cflags` and `ldflags`, one can control the compile period, for example, to use `Eigen`
+
+```c++
+//% cflags: -I xxx/Eigen
+//% includes: Eigen
+
+// use eigen logic
+```
+
+### compiler flag to support CUDA programming
+
+```c++
+//% compiler: nvcc
+//% main: no
+
+__global__
+void VecAdd(float* A, float* B, float* C) {
+  // ...
+}
+```

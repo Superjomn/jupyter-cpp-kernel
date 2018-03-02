@@ -3,6 +3,7 @@ from threading import Thread
 
 from ipykernel.kernelbase import Kernel
 import subprocess
+import logging
 import tempfile
 import os
 
@@ -65,7 +66,7 @@ class RealTimeSubprocess(subprocess.Popen):
 
 class CppKernel(Kernel):
     implementation = 'jupyter_cpp_kernel'
-    implementation_version = '0.0.1'
+    implementation_version = '0.0.2'
     language = 'c++'
     language_version = 'c++11'
     language_info = {
@@ -74,10 +75,12 @@ class CppKernel(Kernel):
         'mimetype': 'text/x-c++src',
         'file_extension': '.cc',
     }
-    banner = ""
+    banner = "cppkernel"
 
     def __init__(self, *args, **kwargs):
         self.files = []
+        self.file_suffix = '.cc'
+        self.compiler = 'g++'
         super(CppKernel, self).__init__(*args, **kwargs)
 
     def cleanup_files(self):
@@ -100,6 +103,7 @@ class CppKernel(Kernel):
         self.send_response(self.iopub_socket, 'stream', {'name': 'stderr', 'text': contents})
 
     def create_jupyter_subprocess(self, cmd):
+        self._write_to_stderr('running cmd: %s\n' % ' '.join(cmd))
         return RealTimeSubprocess(cmd,
                                   lambda contents: self._write_to_stdout(contents.decode()),
                                   lambda contents: self._write_to_stderr(contents.decode()))
@@ -115,8 +119,16 @@ class CppKernel(Kernel):
                 key, value = line[3:].strip().split(':')
                 key = key.strip()
                 value = value.strip()
-                headers = "iostream vector string set map".split()
+                headers = "iostream vector string set map functional".split()
+                logging.warning("%s:%s" % (key, value))
                 print ("%s:%s" % (key, value))
+                # set compiler
+                if key == 'compiler':
+                    self.compiler = value
+                    if "nvcc" in value:
+                        self.file_suffix = '.cu'
+                if key == 'suffix':
+                    self.file_suffix = value
                 if key == 'includes':
                     if value != 'full':
                         headers = value.split()
@@ -141,19 +153,20 @@ class CppKernel(Kernel):
         return code, cflags, ldflags
 
 
-    def compile(self, source_filename, binary_filename, cflags=None, ldflags=None):
+    def compile(self, compiler, source_filename, binary_filename, cflags=None, ldflags=None):
         cflags = ['-std=c++11'] + cflags
-        args = ['g++', source_filename] + cflags + ['-o', binary_filename] + ldflags
+        args = [compiler, source_filename] + cflags + ['-o', binary_filename] + ldflags
         return self.create_jupyter_subprocess(args)
 
     def do_execute(self, code, silent, store_history=True,
                    user_expressions=None, allow_stdin=False):
-        with self.new_temp_file(suffix='.cc') as source_file:
-            code, cflags, ldflags = self._magic(code)
+
+        code, cflags, ldflags = self._magic(code)
+        with self.new_temp_file(suffix=self.file_suffix) as source_file:
             source_file.write(code)
             source_file.flush()
             with self.new_temp_file(suffix='.out') as binary_file:
-                p = self.compile(source_file.name, binary_file.name, cflags, ldflags)
+                p = self.compile(self.compiler, source_file.name, binary_file.name, cflags, ldflags)
                 while p.poll() is None:
                     p.write_contents()
                 p.write_contents()
@@ -166,7 +179,6 @@ class CppKernel(Kernel):
                             'user_expression': {}}
 
         # execute it
-        print("execute %s" % binary_file.name)
         p = self.create_jupyter_subprocess([binary_file.name])
         while p.poll() is None:
             p.write_contents()
